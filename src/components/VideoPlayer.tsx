@@ -167,7 +167,6 @@ function PlyrPlayer({
       clickToPlay: true,
       disableContextMenu: true,
       resetOnEnd: false,
-      ratio: '16:9',
     });
 
     // Inject custom buttons into the plyr control bar after ready

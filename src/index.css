@@ -139,6 +139,9 @@
 }
 
 .plyr__captions {
-  padding: 0 5% 8% !important;
+  /* Let plyr JS control padding-bottom (it adjusts when controls show/hide).
+     Only force horizontal padding and alignment. */
+  padding-left: 5% !important;
+  padding-right: 5% !important;
   text-align: center !important;
 }
