@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+/* ─── Map CSS variables → Tailwind v4 color utilities ────────────────────
+   Without @theme inline, bg-card / bg-background etc. have no effect in v4
+   because v4 looks for --color-* tokens, not bare --card / --background.  */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ─── shadcn/ui theme layer ─────────────────────────────────────────────── */
+@layer base {
+  :root {
+    --background: oklch(8% 0 0);
+    --foreground: oklch(95% 0 0);
+    --card: oklch(12% 0 0);
+    --card-foreground: oklch(95% 0 0);
+    --popover: oklch(12% 0 0);
+    --popover-foreground: oklch(95% 0 0);
+    --primary: oklch(68% 0.18 210);
+    --primary-foreground: oklch(10% 0 0);
+    --secondary: oklch(15% 0 0);
+    --secondary-foreground: oklch(95% 0 0);
+    --muted: oklch(15% 0 0);
+    --muted-foreground: oklch(55% 0 0);
+    --accent: oklch(68% 0.18 210);
+    --accent-foreground: oklch(10% 0 0);
+    --destructive: oklch(60% 0.22 25);
+    --destructive-foreground: oklch(95% 0 0);
+    --border: oklch(20% 0 0);
+    --input: oklch(20% 0 0);
+    --ring: oklch(68% 0.18 210);
+    --radius: 0.5rem;
+
+    /* Chart colors (required by shadcn) */
+    --chart-1: oklch(68% 0.18 210);
+    --chart-2: oklch(60% 0.22 25);
+    --chart-3: oklch(70% 0.15 150);
+    --chart-4: oklch(65% 0.20 300);
+    --chart-5: oklch(75% 0.12 60);
+  }
+
+  /* Force dark mode — NetShort is dark-only */
+  .dark {
+    --background: oklch(8% 0 0);
+    --foreground: oklch(95% 0 0);
+    --card: oklch(12% 0 0);
+    --card-foreground: oklch(95% 0 0);
+    --popover: oklch(12% 0 0);
+    --popover-foreground: oklch(95% 0 0);
+    --primary: oklch(68% 0.18 210);
+    --primary-foreground: oklch(10% 0 0);
+    --secondary: oklch(15% 0 0);
+    --secondary-foreground: oklch(95% 0 0);
+    --muted: oklch(15% 0 0);
+    --muted-foreground: oklch(55% 0 0);
+    --accent: oklch(68% 0.18 210);
+    --accent-foreground: oklch(10% 0 0);
+    --destructive: oklch(60% 0.22 25);
+    --destructive-foreground: oklch(95% 0 0);
+    --border: oklch(20% 0 0);
+    --input: oklch(20% 0 0);
+    --ring: oklch(68% 0.18 210);
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ─── Standard movie-style subtitles ───────────────────────────────────────
+   Override plyr's default caption box with clean outline-style subtitles    */
+
+/* Native ::cue — applies when browser renders the track directly */
+::cue {
+  background-color: transparent;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 1em;
+  font-weight: 500;
+  line-height: 1.4;
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.9),
+     1px -1px 0 rgba(0, 0, 0, 0.9),
+    -1px  1px 0 rgba(0, 0, 0, 0.9),
+     1px  1px 0 rgba(0, 0, 0, 0.9),
+     0    2px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Plyr-rendered captions (.plyr__caption spans) */
+.plyr__caption {
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  color: #fff !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif !important;
+  font-size: clamp(13px, 2.2vw, 18px) !important;
+  font-weight: 500 !important;
+  line-height: 1.5 !important;
+  letter-spacing: 0.01em !important;
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.9),
+     1px -1px 0 rgba(0, 0, 0, 0.9),
+    -1px  1px 0 rgba(0, 0, 0, 0.9),
+     1px  1px 0 rgba(0, 0, 0, 0.9),
+     0    2px 6px rgba(0, 0, 0, 0.85) !important;
+}
+
+.plyr__captions {
+  padding: 0 5% 2.5% !important;
+  text-align: center !important;
+}
