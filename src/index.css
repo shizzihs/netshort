@@ -126,7 +126,7 @@
   color: #fff !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif !important;
-  font-size: clamp(16px, 4vw, 22px) !important;
+  font-size: clamp(18px, 5vw, 26px) !important;
   font-weight: 500 !important;
   line-height: 1.5 !important;
   letter-spacing: 0.01em !important;
@@ -145,7 +145,7 @@
   text-align: center !important;
 }
 
-/* Portrait videos (9:16): lift subs ~30% from bottom using vh units */
+/* Portrait videos (9:16): lift subs above controls bar */
 .plyr.is-portrait .plyr__captions {
-  padding-bottom: 30vh !important;
+  padding-bottom: 12vh !important;
 }
