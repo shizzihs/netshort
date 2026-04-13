@@ -210,34 +210,36 @@ export default function WatchPage() {
         />
       )}
 
-      {/* Video (classic mode) */}
-      <div className="relative w-full">
-        {videoUrl ? (
-          <VideoPlayer
-            src={videoUrl}
-            subtitles={subtitles}
-            onEnded={handleEnded}
-            hasPrevEpisode={!!prevEpisode}
-            hasNextEpisode={!!nextEpisode}
-            onPrevEpisode={handlePrev}
-            onNextEpisode={handleNext}
-            onToggleList={hasMultipleEps ? () => setShowEpisodeList((v) => !v) : undefined}
-          />
-        ) : (
-          <div className="w-full aspect-video flex items-center justify-center text-white/50 text-sm">
-            {isLoading ? 'Đang tải video...' : 'Không có video'}
-          </div>
-        )}
+      {/* Video (classic mode only — unmount plyr when TikTok overlay is active) */}
+      {viewMode === 'classic' && (
+        <div className="relative w-full">
+          {videoUrl ? (
+            <VideoPlayer
+              src={videoUrl}
+              subtitles={subtitles}
+              onEnded={handleEnded}
+              hasPrevEpisode={!!prevEpisode}
+              hasNextEpisode={!!nextEpisode}
+              onPrevEpisode={handlePrev}
+              onNextEpisode={handleNext}
+              onToggleList={hasMultipleEps ? () => setShowEpisodeList((v) => !v) : undefined}
+            />
+          ) : (
+            <div className="w-full aspect-video flex items-center justify-center text-white/50 text-sm">
+              {isLoading ? 'Đang tải video...' : 'Không có video'}
+            </div>
+          )}
 
-        {showAutoNext && nextEpisode && (
-          <AutoNextOverlay
-            nextEpisodeNo={nextEpisode.episodeNo}
-            cover={shortPlayCover}
-            onConfirm={handleAutoNextConfirm}
-            onCancel={handleAutoNextCancel}
-          />
-        )}
-      </div>
+          {showAutoNext && nextEpisode && (
+            <AutoNextOverlay
+              nextEpisodeNo={nextEpisode.episodeNo}
+              cover={shortPlayCover}
+              onConfirm={handleAutoNextConfirm}
+              onCancel={handleAutoNextCancel}
+            />
+          )}
+        </div>
+      )}
 
       {/* Title + mode toggle */}
       <div className="px-4 pt-3 pb-2 flex items-center gap-3">

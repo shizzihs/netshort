@@ -48,30 +48,34 @@ function loadEpisodeIntoVideo(video: HTMLVideoElement, ep: EpisodeInfo | null, a
 
   if (!ep?.playVoucher) { video.src = ''; return }
 
-  // Subtitle tracks
+  // Subtitle tracks — do NOT set default=true; we render cues manually via a
+  // custom div so we control position/style. Keep mode='hidden' so activeCues
+  // is still populated (mode='disabled' would prevent cue loading entirely).
   if (ep.subtitleList?.length) {
-    ep.subtitleList.forEach((sub: SubtitleItem, i) => {
+    ep.subtitleList.forEach((sub: SubtitleItem) => {
       const track = document.createElement('track')
       track.kind = 'subtitles'
       track.src = sub.url
       track.srclang = langCode(sub.subtitleLanguage)
       track.label = LANG_LABELS[sub.subtitleLanguage] ?? sub.subtitleLanguage
-      if (i === 0) track.default = true
       video.appendChild(track)
     })
+    // Force hidden so browser doesn't render native cues
+    video.addEventListener('loadedmetadata', () => {
+      for (let i = 0; i < video.textTracks.length; i++) {
+        video.textTracks[i].mode = 'hidden'
+      }
+    }, { once: true })
   }
 
   if (autoplay) {
     const onCanPlay = () => video.play().catch(() => {})
     video.addEventListener('canplay', onCanPlay, { once: true })
-    video.src = ep.playVoucher
-    video.load()
   } else {
-    // Pre-load silently
     video.preload = 'auto'
-    video.src = ep.playVoucher
-    video.load()
   }
+  video.src = ep.playVoucher
+  video.load()
 }
 
 function setTranslateY(el: HTMLElement | null, vh: number, animated: boolean) {
@@ -154,8 +158,9 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
   const dragging = useRef(false)
   const animating = useRef(false)
 
-  // Progress bar
+  // Progress bar + custom subtitle display
   const progressBarRef = useRef<HTMLDivElement>(null)
+  const subDisplayRef = useRef<HTMLDivElement>(null)
   const seekingBar = useRef(false)
 
   // ── Initial layout ────────────────────────────────────────────────────────
@@ -434,13 +439,22 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
     return () => clearInterval(interval)
   }, [videoRefs])
 
-  // ── Subtitle toggle sync ──────────────────────────────────────────────────
+  // ── Subtitle rendering — poll activeCues and write directly to DOM div ──────
+  // Tracks stay mode='hidden' always; we render text ourselves for positioning.
   useEffect(() => {
-    const v = videoRefs[activeSlotRef.current].current
-    if (!v) return
-    for (let i = 0; i < v.textTracks.length; i++) {
-      v.textTracks[i].mode = subsOn && i === 0 ? 'showing' : 'hidden'
-    }
+    const interval = setInterval(() => {
+      const div = subDisplayRef.current
+      if (!div) return
+      if (!subsOn) { div.textContent = ''; return }
+      const v = videoRefs[activeSlotRef.current].current
+      if (!v || v.textTracks.length === 0) { div.textContent = ''; return }
+      const track = v.textTracks[0]
+      if (!track.activeCues || track.activeCues.length === 0) { div.textContent = ''; return }
+      const cue = track.activeCues[0] as VTTCue
+      // Replace VTT newlines/tags with plain newlines for textContent
+      div.textContent = cue.text.replace(/<[^>]+>/g, '').replace(/\n/g, '\n')
+    }, 80)
+    return () => clearInterval(interval)
   }, [subsOn, videoRefs])
 
   // ── Progress bar seek ─────────────────────────────────────────────────────
@@ -504,6 +518,23 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
           />
         </div>
       ))}
+
+      {/* ── Custom subtitle display (above controls, matches plyr style) ── */}
+      <div
+        ref={subDisplayRef}
+        className="absolute inset-x-0 pointer-events-none text-center whitespace-pre-line"
+        style={{
+          bottom: showControls ? '88px' : '28px',
+          transition: 'bottom 0.3s',
+          padding: '0 5%',
+          color: '#fff',
+          fontSize: 'clamp(18px, 5vw, 26px)',
+          fontWeight: 500,
+          lineHeight: 1.5,
+          letterSpacing: '0.01em',
+          textShadow: '-1px -1px 0 rgba(0,0,0,0.9), 1px -1px 0 rgba(0,0,0,0.9), -1px 1px 0 rgba(0,0,0,0.9), 1px 1px 0 rgba(0,0,0,0.9), 0 2px 6px rgba(0,0,0,0.85)',
+        }}
+      />
 
       {/* ── Seek feedback ── */}
       {seekFeedback && (
