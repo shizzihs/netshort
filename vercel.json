@@ -3,6 +3,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://api.shizzi.online/api/:path*"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ],
   "installCommand": "npm install --legacy-peer-deps",
