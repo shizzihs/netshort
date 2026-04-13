@@ -4,5 +4,7 @@
       "source": "/api/:path*",
       "destination": "https://api.shizzi.online/api/:path*"
     }
-  ]
+  ],
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm build"
 }
