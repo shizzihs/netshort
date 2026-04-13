@@ -132,6 +132,7 @@ function PlyrPlayer({
     video.src = src;
     video.crossOrigin = 'anonymous';
     video.playsInline = true;
+    video.autoplay = true;
     video.style.width = '100%';
 
     for (let i = 0; i < subtitles.length; i++) {
