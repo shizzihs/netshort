@@ -19,12 +19,18 @@ export default function Header() {
           <ArrowLeft className="w-5 h-5" />
         </button>
       ) : (
-        <img
-          src="/favicon.svg"
-          alt="NetShort"
-          className="h-7 w-auto select-none"
-          draggable={false}
-        />
+        <button
+          onClick={() => navigate('/')}
+          className="-ml-1 p-1 rounded"
+          aria-label="Về trang chủ"
+        >
+          <img
+            src="/favicon.svg"
+            alt="NetShort"
+            className="h-7 w-auto select-none"
+            draggable={false}
+          />
+        </button>
       )}
 
       <div className="flex-1" />

@@ -158,7 +158,6 @@ function PlyrPlayer({
         'progress',
         'current-time',
         'mute',
-        'settings',
         'fullscreen',
       ],
       settings: ['speed'],
@@ -191,13 +190,6 @@ function PlyrPlayer({
           subBtn.setAttribute('aria-label', subsOn ? 'Tắt phụ đề' : 'Bật phụ đề');
         });
         controls.insertBefore(subBtn, fsBtn ?? null);
-      }
-
-      // List toggle button
-      if (onListRef.current) {
-        const listBtn = makeBtn(SVG_LIST, 'Danh sách tập');
-        listBtn.addEventListener('click', () => onListRef.current?.());
-        controls.insertBefore(listBtn, fsBtn ?? null);
       }
 
       // Next episode button

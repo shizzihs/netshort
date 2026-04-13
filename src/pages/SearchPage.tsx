@@ -94,7 +94,7 @@ export default function SearchPage() {
   return (
     <div className="px-4 pb-4">
       {/* Search input */}
-      <div className="sticky top-14 z-30 bg-background py-3">
+      <div className="sticky top-0 z-30 bg-background py-3">
         <div className="relative flex items-center">
           <Search className="absolute left-3 w-4 h-4 text-muted-foreground pointer-events-none" />
           <input
