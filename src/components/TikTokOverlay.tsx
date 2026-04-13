@@ -524,7 +524,7 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
         ref={subDisplayRef}
         className="absolute inset-x-0 pointer-events-none text-center whitespace-pre-line"
         style={{
-          bottom: showControls ? '88px' : '28px',
+          bottom: showControls ? 'calc(20vh + 64px)' : '20vh',
           transition: 'bottom 0.3s',
           padding: '0 5%',
           color: '#fff',
