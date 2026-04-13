@@ -145,6 +145,8 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
   const [seekFeedback, setSeekFeedback] = useState<{ side: 'left' | 'right'; key: number } | null>(null)
   const [showEpList, setShowEpList] = useState(false)
   const showEpListRef = useRef(false)  // readable inside native touch handlers
+  // Horizontal seek preview (written directly to DOM for 60fps)
+  const seekPreviewRef = useRef<HTMLDivElement>(null)
 
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -155,7 +157,8 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
   const touchStartY = useRef(0)
   const touchStartX = useRef(0)
   const touchStartTime = useRef(0)
-  const dragging = useRef(false)
+  const dragging = useRef(false)       // vertical drag in progress
+  const hDragging = useRef(false)      // horizontal seek drag in progress
   const animating = useRef(false)
 
   // Progress bar + custom subtitle display
@@ -318,12 +321,31 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
     const overlay = document.getElementById('tiktok-overlay-root')
     if (!overlay) return
 
+    // Seek rate: 0.25s per pixel, capped at 90s
+    const SEEK_RATE = 0.25
+    const SEEK_MAX = 90
+
+    const showSeekPreview = (delta: number, newTime: number) => {
+      const div = seekPreviewRef.current
+      if (!div) return
+      div.style.opacity = '1'
+      const sign = delta >= 0 ? '+' : '−'
+      const absDelta = Math.round(Math.abs(delta))
+      div.innerHTML = `<div style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border-radius:16px;padding:20px 32px;display:flex;flex-direction:column;align-items:center;color:white;"><div style="font-size:32px;font-weight:700;line-height:1">${sign}${absDelta}s</div><div style="font-size:13px;opacity:0.75;margin-top:4px">${formatTime(Math.max(0, newTime))}</div></div>`
+    }
+
+    const hideSeekPreview = () => {
+      const div = seekPreviewRef.current
+      if (div) div.style.opacity = '0'
+    }
+
     const onTouchStart = (e: TouchEvent) => {
       if (seekingBar.current || showEpListRef.current) return
       touchStartY.current = e.touches[0].clientY
       touchStartX.current = e.touches[0].clientX
       touchStartTime.current = Date.now()
       dragging.current = false
+      hDragging.current = false
     }
 
     const onTouchMove = (e: TouchEvent) => {
@@ -331,16 +353,34 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
       const dy = e.touches[0].clientY - touchStartY.current
       const dx = e.touches[0].clientX - touchStartX.current
 
-      // Only handle vertical swipes
-      if (!dragging.current && Math.abs(dx) > Math.abs(dy)) return  // horizontal — ignore
-      dragging.current = true
-      e.preventDefault()  // prevent scroll
+      // Lock gesture direction on first significant move
+      if (!dragging.current && !hDragging.current) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return  // too small to decide
+        if (Math.abs(dx) > Math.abs(dy)) {
+          hDragging.current = true  // horizontal seek
+        } else {
+          dragging.current = true   // vertical episode change
+        }
+      }
 
+      e.preventDefault()
+
+      if (hDragging.current) {
+        // Horizontal seek preview — update DOM directly
+        const v = videoRefs[activeSlotRef.current].current
+        if (!v || !v.duration) return
+        const rawDelta = dx * SEEK_RATE
+        const clampedDelta = Math.max(-SEEK_MAX, Math.min(SEEK_MAX, rawDelta))
+        const newTime = Math.max(0, Math.min(v.duration, v.currentTime + clampedDelta))
+        showSeekPreview(clampedDelta, newTime)
+        return
+      }
+
+      // Vertical episode swipe
       const curSlot = activeSlotRef.current
       const nextSlot = (curSlot + 1) % 3
       const prevSlot = (curSlot + 2) % 3
 
-      // Live drag — update transforms directly on DOM
       const curEpIdx = slotEpIdxRef.current[curSlot]
       const canGoNext = curEpIdx < episodes.length - 1
       const canGoPrev = curEpIdx > 0
@@ -365,6 +405,20 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
       const dy = e.changedTouches[0].clientY - touchStartY.current
       const dx = e.changedTouches[0].clientX - touchStartX.current
       const dt = Date.now() - touchStartTime.current
+
+      // Horizontal seek: apply on release
+      if (hDragging.current) {
+        hDragging.current = false
+        hideSeekPreview()
+        const v = videoRefs[activeSlotRef.current].current
+        if (v && v.duration) {
+          const rawDelta = dx * SEEK_RATE
+          const clampedDelta = Math.max(-SEEK_MAX, Math.min(SEEK_MAX, rawDelta))
+          v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + clampedDelta))
+        }
+        revealControls()
+        return
+      }
 
       if (dragging.current) {
         dragging.current = false
@@ -536,7 +590,14 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
         }}
       />
 
-      {/* ── Seek feedback ── */}
+      {/* ── Horizontal seek preview (DOM-direct, no React re-render) ── */}
+      <div
+        ref={seekPreviewRef}
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        style={{ opacity: 0, transition: 'opacity 0.15s', zIndex: 5 }}
+      />
+
+      {/* ── Seek feedback (double-tap) ── */}
       {seekFeedback && (
         <SeekFeedback key={seekFeedback.key} side={seekFeedback.side} visible />
       )}
@@ -545,6 +606,18 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
       <div
         className={`absolute inset-0 flex flex-col pointer-events-none transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
       >
+        {/* Center play/pause button */}
+        <button
+          className="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 flex items-center justify-center rounded-full"
+          style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+          onClick={togglePlayPause}
+          aria-label={playing ? 'Tạm dừng' : 'Phát'}
+        >
+          {playing
+            ? <svg viewBox="0 0 24 24" fill="white" className="w-8 h-8"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            : <svg viewBox="0 0 24 24" fill="white" className="w-8 h-8"><path d="M8 5v14l11-7z"/></svg>
+          }
+        </button>
         {/* Top bar */}
         <div
           className="pointer-events-auto flex items-center justify-between px-4 pt-safe"
