@@ -288,9 +288,9 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
         // Sync sub state
         const newEp = episodes[newEpIdx]
         setSubsOn(!!(newEp?.subtitleList?.length))
-        // Apply current sub toggle to new video
+        // Keep all tracks hidden — subtitles are rendered via custom div (subDisplayRef)
         for (let i = 0; i < newVideo.textTracks.length; i++) {
-          newVideo.textTracks[i].mode = newEp?.subtitleList?.length ? 'showing' : 'hidden'
+          newVideo.textTracks[i].mode = 'hidden'
         }
       }
 
