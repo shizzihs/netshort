@@ -151,6 +151,14 @@ function PlyrPlayer({
     container.appendChild(video);
     if (onEnded) video.addEventListener('ended', onEnded);
 
+    // Detect portrait video and mark the plyr container for CSS targeting
+    video.addEventListener('loadedmetadata', () => {
+      if (video.videoHeight > video.videoWidth) {
+        const plyrEl = container.querySelector('.plyr') as HTMLElement | null;
+        plyrEl?.classList.add('is-portrait');
+      }
+    });
+
     const player = new Plyr(video, {
       controls: [
         'play-large',
