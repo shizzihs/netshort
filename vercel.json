@@ -5,6 +5,6 @@
       "destination": "https://api.shizzi.online/api/:path*"
     }
   ],
-  "installCommand": "pnpm install",
+  "installCommand": "npm install -g pnpm@9 && pnpm install",
   "buildCommand": "pnpm build"
 }
