@@ -5,6 +5,7 @@ import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useFilmDetail, useEpisodes } from '../hooks/useFilmDetail'
 import VideoPlayer from '@/components/VideoPlayer'
+import TikTokPlayer from '@/components/TikTokPlayer'
 import AutoNextOverlay from '@/components/AutoNextOverlay'
 import EpisodeGroupTabs from '@/components/EpisodeGroupTabs'
 import { usePlayerStore } from '@/stores/usePlayerStore'
@@ -65,6 +66,8 @@ export default function WatchPage() {
 
   const setCurrentEpisode = usePlayerStore((s) => s.setCurrentEpisode)
   const autoNextEnabled = usePlayerStore((s) => s.autoNextEnabled)
+  const viewMode = usePlayerStore((s) => s.viewMode)
+  const setViewMode = usePlayerStore((s) => s.setViewMode)
   const saveProgress = usePersonalStore((s) => s.saveProgress)
   const addHistory = usePersonalStore((s) => s.addHistory)
 
@@ -187,21 +190,36 @@ export default function WatchPage() {
       )
     : null
 
+  const nextVideoUrl = nextEpisode?.playVoucher ?? undefined
+
   return (
     <div className="min-h-dvh bg-black">
-      {/* Video + injected plyr controls */}
+      {/* Video */}
       <div className="relative w-full">
         {videoUrl ? (
-          <VideoPlayer
-            src={videoUrl}
-            subtitles={subtitles}
-            onEnded={handleEnded}
-            hasPrevEpisode={!!prevEpisode}
-            hasNextEpisode={!!nextEpisode}
-            onPrevEpisode={handlePrev}
-            onNextEpisode={handleNext}
-            onToggleList={hasMultipleEps ? () => setShowEpisodeList((v) => !v) : undefined}
-          />
+          viewMode === 'tiktok' ? (
+            <TikTokPlayer
+              src={videoUrl}
+              nextSrc={nextVideoUrl}
+              subtitles={subtitles}
+              onEnded={handleEnded}
+              hasPrevEpisode={!!prevEpisode}
+              hasNextEpisode={!!nextEpisode}
+              onPrevEpisode={handlePrev}
+              onNextEpisode={handleNext}
+            />
+          ) : (
+            <VideoPlayer
+              src={videoUrl}
+              subtitles={subtitles}
+              onEnded={handleEnded}
+              hasPrevEpisode={!!prevEpisode}
+              hasNextEpisode={!!nextEpisode}
+              onPrevEpisode={handlePrev}
+              onNextEpisode={handleNext}
+              onToggleList={hasMultipleEps ? () => setShowEpisodeList((v) => !v) : undefined}
+            />
+          )
         ) : (
           <div className="w-full aspect-video flex items-center justify-center text-white/50 text-sm">
             {isLoading ? 'Đang tải video...' : 'Không có video'}
@@ -218,9 +236,24 @@ export default function WatchPage() {
         )}
       </div>
 
-      {/* Title */}
-      <div className="px-4 pt-3 pb-2">
-        <h2 className="text-sm font-medium text-foreground truncate">{title}</h2>
+      {/* Title + mode toggle */}
+      <div className="px-4 pt-3 pb-2 flex items-center gap-3">
+        <h2 className="flex-1 text-sm font-medium text-foreground truncate">{title}</h2>
+        {/* Mode toggle pill */}
+        <button
+          onClick={() => setViewMode(viewMode === 'tiktok' ? 'classic' : 'tiktok')}
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-colors"
+          style={viewMode === 'tiktok'
+            ? { borderColor: '#38bdf8', color: '#38bdf8', background: 'rgba(56,189,248,0.08)' }
+            : { borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', background: 'transparent' }}
+          aria-label="Chuyển chế độ xem"
+        >
+          {viewMode === 'tiktok' ? (
+            <><span>⚡</span> TikTok</>
+          ) : (
+            <><span>🎬</span> Classic</>
+          )}
+        </button>
       </div>
 
       {/* Episode list — only shown outside fullscreen */}
