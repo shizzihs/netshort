@@ -5,7 +5,7 @@ import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useFilmDetail, useEpisodes } from '../hooks/useFilmDetail'
 import VideoPlayer from '@/components/VideoPlayer'
-import TikTokPlayer from '@/components/TikTokPlayer'
+import TikTokOverlay from '@/components/TikTokOverlay'
 import AutoNextOverlay from '@/components/AutoNextOverlay'
 import EpisodeGroupTabs from '@/components/EpisodeGroupTabs'
 import { usePlayerStore } from '@/stores/usePlayerStore'
@@ -122,6 +122,14 @@ export default function WatchPage() {
 
   const handleAutoNextCancel = useCallback(() => setShowAutoNext(false), [])
 
+  const handleTikTokClose = useCallback((finalIndex: number) => {
+    setViewMode('classic')
+    const ep = playList[finalIndex]
+    if (ep && shortPlayId && ep.episodeId !== episodeId) {
+      navigate(`/watch/${shortPlayId}/${ep.episodeId}`)
+    }
+  }, [playList, shortPlayId, episodeId, navigate, setViewMode])
+
   const handleEpisodeSelect = useCallback((episode: EpisodeInfo) => {
     if (!shortPlayId || !currentEpisode) return
     saveProgress(shortPlayId, currentEpisode.episodeId, currentEpisode.episodeNo)
@@ -190,36 +198,31 @@ export default function WatchPage() {
       )
     : null
 
-  const nextVideoUrl = nextEpisode?.playVoucher ?? undefined
-
   return (
     <div className="min-h-dvh bg-black">
-      {/* Video */}
+      {/* TikTok overlay — fixed full-viewport, rendered on top of everything */}
+      {viewMode === 'tiktok' && playList.length > 0 && currentIndex >= 0 && (
+        <TikTokOverlay
+          episodes={playList}
+          initialIndex={currentIndex}
+          shortPlayId={shortPlayId!}
+          onClose={handleTikTokClose}
+        />
+      )}
+
+      {/* Video (classic mode) */}
       <div className="relative w-full">
         {videoUrl ? (
-          viewMode === 'tiktok' ? (
-            <TikTokPlayer
-              src={videoUrl}
-              nextSrc={nextVideoUrl}
-              subtitles={subtitles}
-              onEnded={handleEnded}
-              hasPrevEpisode={!!prevEpisode}
-              hasNextEpisode={!!nextEpisode}
-              onPrevEpisode={handlePrev}
-              onNextEpisode={handleNext}
-            />
-          ) : (
-            <VideoPlayer
-              src={videoUrl}
-              subtitles={subtitles}
-              onEnded={handleEnded}
-              hasPrevEpisode={!!prevEpisode}
-              hasNextEpisode={!!nextEpisode}
-              onPrevEpisode={handlePrev}
-              onNextEpisode={handleNext}
-              onToggleList={hasMultipleEps ? () => setShowEpisodeList((v) => !v) : undefined}
-            />
-          )
+          <VideoPlayer
+            src={videoUrl}
+            subtitles={subtitles}
+            onEnded={handleEnded}
+            hasPrevEpisode={!!prevEpisode}
+            hasNextEpisode={!!nextEpisode}
+            onPrevEpisode={handlePrev}
+            onNextEpisode={handleNext}
+            onToggleList={hasMultipleEps ? () => setShowEpisodeList((v) => !v) : undefined}
+          />
         ) : (
           <div className="w-full aspect-video flex items-center justify-center text-white/50 text-sm">
             {isLoading ? 'Đang tải video...' : 'Không có video'}
