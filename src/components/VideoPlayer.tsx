@@ -48,6 +48,7 @@ function langCode(locale?: string): string {
 const SVG_PREV = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="4" x2="5" y2="20"/></svg>`
 const SVG_NEXT = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="4" x2="19" y2="20"/></svg>`
 const SVG_LIST = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`
+const SVG_SUB = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h4M13 15h4M7 11h2M12 11h5"/></svg>`
 
 const PLYR_THEME: React.CSSProperties = {
   '--plyr-color-main': '#38bdf8',
@@ -177,6 +178,20 @@ function PlyrPlayer({
 
       // Find the fullscreen button to insert before it
       const fsBtn = controls.querySelector('[data-plyr="fullscreen"]');
+
+      // Subtitle toggle button — only when subtitles exist
+      if (subtitles.length > 0) {
+        let subsOn = true;
+        const subBtn = makeBtn(SVG_SUB, 'Phụ đề');
+        subBtn.style.color = '#38bdf8'; // active = highlighted
+        subBtn.addEventListener('click', () => {
+          subsOn = !subsOn;
+          player.currentTrack = subsOn ? 0 : -1;
+          subBtn.style.color = subsOn ? '#38bdf8' : 'rgba(255,255,255,0.5)';
+          subBtn.setAttribute('aria-label', subsOn ? 'Tắt phụ đề' : 'Bật phụ đề');
+        });
+        controls.insertBefore(subBtn, fsBtn ?? null);
+      }
 
       // List toggle button
       if (onListRef.current) {
