@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import FilmGrid, { FilmGridSkeleton } from '@/components/FilmGrid'
 import Pagination from '@/components/Pagination'
-import { useCategories, useWebCategoryFilms } from '../hooks/useCategories'
+import { useCategories, useCategoryFilms, useWebCategoryFilms } from '../hooks/useCategories'
 import type { Film } from '@/types'
 
 interface Tag {
   labelLanguageId: number | null
   labelName: string
+  newLabelIdList?: string[]
 }
 
 function extractTags(data: unknown): Tag[] {
@@ -19,19 +20,54 @@ function extractTags(data: unknown): Tag[] {
   return []
 }
 
+function extractFilms(data: unknown): Film[] {
+  if (!data) return []
+  const d = data as Record<string, unknown>
+  // Mobile API wraps films in list / dataList / or returns array directly
+  if (Array.isArray(d?.list)) return d.list as Film[]
+  if (Array.isArray(d?.dataList)) return d.dataList as Film[]
+  if (Array.isArray(data)) return data as Film[]
+  return []
+}
+
 export default function CategoryPage() {
-  const [selectedLabel, setSelectedLabel] = useState('all-plots')
+  // null → "Tất cả" (all-plots via web scraping)
+  const [selectedTag, setSelectedTag] = useState<Tag | null>(null)
   const [page, setPage] = useState(1)
 
   const { data: categoriesData, isLoading: categoriesLoading } = useCategories()
   const tags = extractTags(categoriesData)
 
-  const { data: webData, isLoading: filmsLoading } = useWebCategoryFilms(selectedLabel, page)
-  const films = (webData?.films ?? []) as Film[]
-  const hasMore = webData?.hasMore ?? false
+  const isAllPlots = selectedTag === null || selectedTag.labelLanguageId === -1
+  const tagIds = selectedTag?.newLabelIdList ?? []
+  const offset = (page - 1) * 20
 
-  const handleTagSelect = (labelName: string) => {
-    setSelectedLabel(labelName)
+  // "Tất cả": web scraping (all-plots, real pagination)
+  const { data: webData, isLoading: webLoading } = useWebCategoryFilms(
+    isAllPlots ? 'all-plots' : '',
+    isAllPlots ? page : 1,
+  )
+
+  // Specific category: mobile API (correctly filtered)
+  const { data: mobileData, isLoading: mobileLoading } = useCategoryFilms(
+    tagIds,
+    offset,
+  )
+
+  let films: Film[]
+  let hasMore: boolean
+  const filmsLoading = isAllPlots ? webLoading : mobileLoading
+
+  if (isAllPlots) {
+    films = (webData?.films ?? []) as Film[]
+    hasMore = webData?.hasMore ?? false
+  } else {
+    films = extractFilms(mobileData)
+    hasMore = films.length >= 20
+  }
+
+  const handleTagSelect = (tag: Tag) => {
+    setSelectedTag(tag.labelLanguageId === -1 ? null : tag)
     setPage(1)
   }
 
@@ -53,14 +89,14 @@ export default function CategoryPage() {
             ))
           ) : (
             tags.map((tag) => {
-              const isAllTag = tag.labelLanguageId === -1
-              const key = isAllTag ? 'all-plots' : tag.labelName
-              const isActive = key === selectedLabel
+              const isActive = tag.labelLanguageId === -1
+                ? isAllPlots
+                : selectedTag?.labelName === tag.labelName
 
               return (
                 <button
                   key={tag.labelName}
-                  onClick={() => handleTagSelect(key)}
+                  onClick={() => handleTagSelect(tag)}
                   className={cn(
                     'shrink-0 px-4 h-8 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
                     isActive
@@ -78,11 +114,7 @@ export default function CategoryPage() {
 
       {/* Film grid */}
       <div className="px-4 mt-2">
-        {selectedLabel === '' ? (
-          <p className="text-center py-10 text-muted-foreground text-sm">
-            Chọn thể loại để xem phim
-          </p>
-        ) : filmsLoading ? (
+        {filmsLoading ? (
           <FilmGridSkeleton count={6} />
         ) : films.length === 0 ? (
           <p className="text-center py-10 text-muted-foreground text-sm">

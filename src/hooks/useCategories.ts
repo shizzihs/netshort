@@ -13,6 +13,7 @@ export function useCategoryFilms(tagIds: string[], offset = 0, limit = 20) {
   return useQuery({
     queryKey: ['category-films', tagIds, offset, limit],
     queryFn: () => getCategoryFilms(tagIds, offset, limit),
+    enabled: tagIds.length > 0,
     staleTime: 5 * 60 * 1000,
   })
 }
