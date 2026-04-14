@@ -29,6 +29,7 @@ export default function CategoryPage() {
   const { data: webData, isLoading: filmsLoading } = useWebCategoryFilms(selectedLabel, page)
   const films = (webData?.films ?? []) as Film[]
   const hasMore = webData?.hasMore ?? false
+  const totalPages = webData?.totalPages ?? 0
 
   const handleTagSelect = (label: string) => {
     setSelectedLabel(label)
@@ -93,6 +94,7 @@ export default function CategoryPage() {
           page={page}
           hasNext={hasMore}
           onPageChange={handlePageChange}
+          totalPages={totalPages > 0 ? totalPages : undefined}
         />
       )}
     </div>
