@@ -20,7 +20,7 @@ function extractTags(data: unknown): Tag[] {
 }
 
 export default function CategoryPage() {
-  const [selectedLabel, setSelectedLabel] = useState('')
+  const [selectedLabel, setSelectedLabel] = useState('all-plots')
   const [page, setPage] = useState(1)
 
   const { data: categoriesData, isLoading: categoriesLoading } = useCategories()
@@ -54,7 +54,7 @@ export default function CategoryPage() {
           ) : (
             tags.map((tag) => {
               const isAllTag = tag.labelLanguageId === -1
-              const key = isAllTag ? '' : tag.labelName
+              const key = isAllTag ? 'all-plots' : tag.labelName
               const isActive = key === selectedLabel
 
               return (
