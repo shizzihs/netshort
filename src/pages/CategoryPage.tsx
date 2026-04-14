@@ -46,10 +46,10 @@ export default function CategoryPage() {
   const tags = extractTags(categoriesData)
 
   const selectedTag = tags.find((t) => t.labelName === selectedLabel)
-  // Android app sends only the first ID from newLabelIdList (via labelLanguageId / getKey()).
-  // Sending all IDs causes the server to return incomplete results.
-  const firstTagId = selectedTag?.newLabelIdList?.find(Boolean) ?? null
-  const tagIds: string[] = selectedLabel === '' || !firstTagId ? [] : [firstTagId]
+  // Send all IDs in newLabelIdList — each genre groups male/female/other sub-label variants.
+  // Sending all gives the full film set for that genre (tested: 11 films for "Cổ Đại").
+  const tagIds: string[] =
+    selectedLabel === '' ? [] : (selectedTag?.newLabelIdList?.filter(Boolean) as string[] ?? [])
 
   const { data: filmsData, isLoading: filmsLoading } = useCategoryFilms(tagIds, currentOffset, PAGE_SIZE)
   const { films, completed, maxOffset } = extractFilms(filmsData)
@@ -129,7 +129,7 @@ export default function CategoryPage() {
         )}
       </div>
 
-      {!filmsLoading && films.length > 0 && (
+      {!filmsLoading && films.length > 0 && (page > 1 || (!completed && films.length >= PAGE_SIZE)) && (
         <Pagination
           page={page}
           hasNext={!completed && films.length >= PAGE_SIZE}
