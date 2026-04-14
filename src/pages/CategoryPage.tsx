@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import FilmGrid, { FilmGridSkeleton } from '@/components/FilmGrid'
 import Pagination from '@/components/Pagination'
@@ -23,35 +23,59 @@ function extractTags(data: unknown): Tag[] {
   return []
 }
 
-function extractFilms(data: unknown): { films: Film[]; completed: boolean } {
-  if (!data) return { films: [], completed: true }
+function extractFilms(data: unknown): { films: Film[]; completed: boolean; maxOffset: number } {
+  if (!data) return { films: [], completed: true, maxOffset: 0 }
   const d = data as Record<string, unknown>
   const films = Array.isArray(d?.dataList) ? (d.dataList as Film[]) : []
   const completed = Boolean(d?.completed)
-  return { films, completed }
+  const maxOffset = typeof d?.maxOffset === 'number' ? d.maxOffset : 0
+  return { films, completed, maxOffset }
 }
 
 export default function CategoryPage() {
-  // selectedLabel: '' = Tất cả (labelLanguageId === -1), otherwise labelName
   const [selectedLabel, setSelectedLabel] = useState('')
-  const [offset, setOffset] = useState(0)
+  const [page, setPage] = useState(1)
+  // cursors[i] = offset to send when fetching page (i+1).
+  // Populated from the server's maxOffset after each successful fetch so we
+  // use the server's own cursor rather than computing (page-1)*PAGE_SIZE.
+  const [cursors, setCursors] = useState<number[]>([0])
+
+  const currentOffset = cursors[page - 1] ?? (page - 1) * PAGE_SIZE
 
   const { data: categoriesData, isLoading: categoriesLoading } = useCategories()
   const tags = extractTags(categoriesData)
 
   const selectedTag = tags.find((t) => t.labelName === selectedLabel)
-  // "Tất cả" (labelLanguageId === -1) means no filter; use its newLabelIdList = []
   const tagIds: string[] =
     selectedLabel === '' ? [] : (selectedTag?.newLabelIdList?.filter(Boolean) as string[] ?? [])
 
-  const { data: filmsData, isLoading: filmsLoading } = useCategoryFilms(tagIds, offset, PAGE_SIZE)
-  const { films, completed } = extractFilms(filmsData)
+  const { data: filmsData, isLoading: filmsLoading } = useCategoryFilms(tagIds, currentOffset, PAGE_SIZE)
+  const { films, completed, maxOffset } = extractFilms(filmsData)
 
-  const page = Math.floor(offset / PAGE_SIZE) + 1
+  // After each successful fetch, store the server's maxOffset as the cursor
+  // for the next page so subsequent requests use the correct server-side cursor.
+  useEffect(() => {
+    if (filmsLoading || !filmsData) return
+    if (completed) return
+    const nextCursor = maxOffset > currentOffset ? maxOffset : currentOffset + PAGE_SIZE
+    setCursors((prev) => {
+      if (prev[page] !== undefined) return prev // already known — don't overwrite
+      const next = [...prev]
+      next[page] = nextCursor
+      return next
+    })
+  }, [filmsData, filmsLoading, completed, maxOffset, currentOffset, page])
 
   const handleTagSelect = (labelName: string) => {
     setSelectedLabel(labelName)
-    setOffset(0)
+    setPage(1)
+    setCursors([0])
+  }
+
+  const handlePageChange = (p: number) => {
+    setPage(p)
+    // Scroll to top of film list on page change
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (
@@ -67,7 +91,6 @@ export default function CategoryPage() {
             ))
           ) : (
             tags.map((tag) => {
-              // "Tất cả" entry has labelLanguageId === -1; treat its key as ''
               const isAllTag = tag.labelLanguageId === -1
               const key = isAllTag ? '' : tag.labelName
               const isActive = key === selectedLabel
@@ -108,7 +131,7 @@ export default function CategoryPage() {
         <Pagination
           page={page}
           hasNext={!completed && films.length >= PAGE_SIZE}
-          onPageChange={(p) => setOffset((p - 1) * PAGE_SIZE)}
+          onPageChange={handlePageChange}
         />
       )}
     </div>
