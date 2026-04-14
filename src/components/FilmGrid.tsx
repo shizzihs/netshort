@@ -22,9 +22,9 @@ export default function FilmGrid({ films, variant = 'default' }: FilmGridProps) 
         ? 'grid grid-cols-3 gap-2'
         : 'grid grid-cols-2 gap-3'
     }>
-      {films.map((film, i) => (
+      {films.map((film) => (
         <FilmCard
-          key={`${film.shortPlayId}-${i}`}
+          key={film.shortPlayId}
           shortPlayId={film.shortPlayId}
           shortPlayName={film.shortPlayName}
           shortPlayCover={film.shortPlayCover}
