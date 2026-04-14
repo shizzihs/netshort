@@ -46,8 +46,10 @@ export default function CategoryPage() {
   const tags = extractTags(categoriesData)
 
   const selectedTag = tags.find((t) => t.labelName === selectedLabel)
-  const tagIds: string[] =
-    selectedLabel === '' ? [] : (selectedTag?.newLabelIdList?.filter(Boolean) as string[] ?? [])
+  // Android app sends only the first ID from newLabelIdList (via labelLanguageId / getKey()).
+  // Sending all IDs causes the server to return incomplete results.
+  const firstTagId = selectedTag?.newLabelIdList?.find(Boolean) ?? null
+  const tagIds: string[] = selectedLabel === '' || !firstTagId ? [] : [firstTagId]
 
   const { data: filmsData, isLoading: filmsLoading } = useCategoryFilms(tagIds, currentOffset, PAGE_SIZE)
   const { films, completed, maxOffset } = extractFilms(filmsData)
