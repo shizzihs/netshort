@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getFilmDetail, getEpisodes } from '../api/video';
+import { getFilmDetail, getEpisodes, getChapterContent } from '../api/video';
 
 export function useFilmDetail(shortPlayId: string) {
   return useQuery({
@@ -16,6 +16,17 @@ export function useEpisodes(shortPlayId: string) {
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
     // Don't refetch on window focus — avoids URL churn
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useChapterContent(bookId: string, chapterId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['chapter', bookId, chapterId],
+    queryFn: () => getChapterContent(bookId, chapterId),
+    enabled: enabled && !!bookId && !!chapterId,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 }

@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import FilmGrid, { FilmGridSkeleton } from '@/components/FilmGrid'
 import HeroSection, { HeroSkeleton } from '@/components/HeroSection'
 import ContinueWatchingRow from '@/components/ContinueWatchingRow'
+import { useProvider } from '@/contexts/ProviderContext'
 import type { Film } from '@/types'
 
 function extractFilms(data: unknown): Film[] {
@@ -21,11 +22,13 @@ function extractFilms(data: unknown): Film[] {
     return films.length > 0 ? films : (data as Film[])
   }
   const d = data as Record<string, unknown>
+  if (Array.isArray(d?.contentInfos)) return d.contentInfos as Film[]
   if (Array.isArray(d?.dataList)) return d.dataList as Film[]
   return []
 }
 
 export default function HomePage() {
+  const { provider } = useProvider()
   const { data: tabsData, isLoading: tabsLoading } = useTabs()
   const tabs = Array.isArray(tabsData) ? tabsData : (tabsData as Record<string, unknown>)?.dataList ?? []
   const tabList = (tabs as Array<{ id?: string; tabId?: string; name?: string; tabName?: string; isGroup?: boolean }>)
@@ -39,23 +42,19 @@ export default function HomePage() {
   const { data: tabContent, isLoading: contentLoading } = useTabContent(effectiveTabId || null)
   const films = extractFilms(tabContent)
 
-  // Hero = first film in the active tab
   const heroFilm = films[0] ?? null
   const gridFilms = films.slice(1)
 
   return (
     <div className="pb-2">
-      {/* Hero Section */}
       {contentLoading ? (
         <HeroSkeleton />
       ) : heroFilm ? (
         <HeroSection film={heroFilm} />
       ) : null}
 
-      {/* Continue Watching — hiển thị nếu có progress */}
       <ContinueWatchingRow />
 
-      {/* Tab bar */}
       {tabsLoading ? (
         <div className="flex gap-2 px-4 py-3 overflow-x-auto">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -64,6 +63,7 @@ export default function HomePage() {
         </div>
       ) : tabList.length > 0 ? (
         <Tabs
+          key={provider}
           value={effectiveTabId}
           onValueChange={setActiveTabId}
           className="mt-3"

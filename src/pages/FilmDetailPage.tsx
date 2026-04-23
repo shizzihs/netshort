@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Play, ChevronDown, ChevronUp, Heart } from 'lucide-react'
 import { toast } from 'sonner'
 import { useFilmDetail, useEpisodes } from '../hooks/useFilmDetail'
+import { useProvider } from '@/contexts/ProviderContext'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -33,6 +34,7 @@ function FilmDetailSkeleton() {
 export default function FilmDetailPage() {
   const { shortPlayId } = useParams<{ shortPlayId: string }>()
   const navigate = useNavigate()
+  const { isReelShort } = useProvider()
   const [introExpanded, setIntroExpanded] = useState(false)
   const isFavorite = usePersonalStore((s) => s.isFavorite)
   const toggleFavorite = usePersonalStore((s) => s.toggleFavorite)
@@ -52,9 +54,10 @@ export default function FilmDetailPage() {
     Array.isArray(film.shortPlayEpisodeInfos) ? film.shortPlayEpisodeInfos : []
   ) as EpisodeInfo[]
 
-  const episodePlayList = (
-    (episodesData as Record<string, unknown>)?.episodePlayList
-  ) as EpisodeInfo[] | undefined
+  // ReelShort: episodesData is a plain array; NetShort: episodesData.episodePlayList
+  const episodePlayList = Array.isArray(episodesData)
+    ? (episodesData as EpisodeInfo[])
+    : ((episodesData as Record<string, unknown>)?.episodePlayList as EpisodeInfo[] | undefined)
 
   const episodes: EpisodeInfo[] =
     detailEpisodes.length > 0
@@ -93,6 +96,7 @@ export default function FilmDetailPage() {
                 shortPlayId,
                 shortPlayName,
                 shortPlayCover,
+                provider: isReelShort ? 'reelshort' : 'netshort',
               })
               toast.success(wasFav ? 'Đã bỏ yêu thích' : 'Đã thêm vào yêu thích ❤️')
             }}

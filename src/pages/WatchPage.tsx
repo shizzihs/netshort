@@ -1,9 +1,12 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { toast } from 'sonner'
-import { useFilmDetail, useEpisodes } from '../hooks/useFilmDetail'
+import { useFilmDetail, useEpisodes, useChapterContent } from '../hooks/useFilmDetail'
+import { getChapterContent } from '../api/video'
+import { useProvider } from '@/contexts/ProviderContext'
 import VideoPlayer from '@/components/VideoPlayer'
 import TikTokOverlay from '@/components/TikTokOverlay'
 import AutoNextOverlay from '@/components/AutoNextOverlay'
@@ -15,6 +18,9 @@ import type { EpisodeInfo, EpisodePlay } from '@/types'
 
 /** Merge detail episodes + fresh play vouchers from episode_play_detail */
 function buildPlayList(detailData: unknown, episodesData: unknown): EpisodeInfo[] {
+  // ReelShort: getEpisodeList returns a plain array
+  if (Array.isArray(episodesData)) return episodesData as EpisodeInfo[]
+
   const detail = (detailData ?? {}) as Record<string, unknown>
   const episodes = (episodesData ?? {}) as Record<string, unknown>
 
@@ -61,8 +67,11 @@ export default function WatchPage() {
     }
   }, [])
 
+  const { isReelShort } = useProvider()
+  const queryClient = useQueryClient()
   const { data: detailData } = useFilmDetail(shortPlayId!)
   const { data: episodesData, isLoading } = useEpisodes(shortPlayId!)
+  const { data: chapterContent } = useChapterContent(shortPlayId!, episodeId!, isReelShort)
 
   const setCurrentEpisode = usePlayerStore((s) => s.setCurrentEpisode)
   const autoNextEnabled = usePlayerStore((s) => s.autoNextEnabled)
@@ -70,6 +79,24 @@ export default function WatchPage() {
   const setViewMode = usePlayerStore((s) => s.setViewMode)
   const saveProgress = usePersonalStore((s) => s.saveProgress)
   const addHistory = usePersonalStore((s) => s.addHistory)
+
+  // Default to TikTok mode for ReelShort
+  useEffect(() => {
+    if (isReelShort) setViewMode('tiktok')
+  }, [isReelShort, setViewMode])
+
+  const getVideoUrl = useCallback(async (epId: string): Promise<string | null> => {
+    try {
+      const data = await queryClient.fetchQuery({
+        queryKey: ['chapter', shortPlayId, epId],
+        queryFn: () => getChapterContent(shortPlayId!, epId),
+        staleTime: 5 * 60 * 1000,
+      })
+      return (data as any)?.playVoucher ?? null
+    } catch {
+      return null
+    }
+  }, [queryClient, shortPlayId])
 
   const detail = (detailData ?? {}) as Record<string, unknown>
   const shortPlayName = String(detail.shortPlayName ?? '')
@@ -94,7 +121,7 @@ export default function WatchPage() {
 
   useEffect(() => {
     if (shortPlayId && shortPlayName && shortPlayCover)
-      addHistory({ shortPlayId, shortPlayName, shortPlayCover })
+      addHistory({ shortPlayId, shortPlayName, shortPlayCover, provider: isReelShort ? 'reelshort' : 'netshort' })
   }, [shortPlayId, shortPlayName, shortPlayCover, addHistory])
 
   useEffect(() => {
@@ -152,7 +179,9 @@ export default function WatchPage() {
   // Stable video URL — locked per episodeId, not updated on background refetch
   const stableUrlRef = useRef('')
   const prevEpisodeIdRef = useRef('')
-  const freshUrl = currentEpisode?.playVoucher ?? ''
+  const freshUrl = isReelShort
+    ? (chapterContent?.playVoucher ?? '')
+    : (currentEpisode?.playVoucher ?? '')
   if (episodeId !== prevEpisodeIdRef.current && freshUrl) {
     prevEpisodeIdRef.current = episodeId ?? ''
     stableUrlRef.current = freshUrl
@@ -207,6 +236,7 @@ export default function WatchPage() {
           initialIndex={currentIndex}
           shortPlayId={shortPlayId!}
           onClose={handleTikTokClose}
+          getVideoUrl={isReelShort ? getVideoUrl : undefined}
         />
       )}
 

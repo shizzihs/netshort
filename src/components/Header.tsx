@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Search } from 'lucide-react'
+import ProviderSelector from './ProviderSelector'
 
 export default function Header() {
   const navigate = useNavigate()
@@ -33,7 +34,9 @@ export default function Header() {
         </button>
       )}
 
-      <div className="flex-1" />
+      <div className="flex-1 flex justify-center">
+        {!isFilmDetail && <ProviderSelector />}
+      </div>
 
       <button
         onClick={() => navigate('/search')}

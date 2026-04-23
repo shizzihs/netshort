@@ -7,3 +7,7 @@ export function getFilmDetail(shortPlayId: string) {
 export function getEpisodes(shortPlayId: string) {
   return get<any>(`/films/detail/${shortPlayId}/episodes`);
 }
+
+export function getChapterContent(bookId: string, chapterId: string) {
+  return get<any>(`/films/detail/${bookId}/chapters/${chapterId}`);
+}

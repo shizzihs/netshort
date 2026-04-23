@@ -1,7 +1,9 @@
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { History } from 'lucide-react'
 import { usePersonalStore } from '@/stores/usePersonalStore'
+import { useProvider } from '@/contexts/ProviderContext'
 import FilmCard from '@/components/FilmCard'
+import type { HistoryEntry } from '@/lib/localStorage'
 
 function relativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime()
@@ -15,6 +17,42 @@ function relativeTime(isoString: string): string {
   return new Date(isoString).toLocaleDateString('vi-VN')
 }
 
+function HistoryItem({ item }: { item: HistoryEntry }) {
+  const navigate = useNavigate()
+  const { provider: currentProvider, setProvider } = useProvider()
+
+  const handleClick = () => {
+    if (item.provider !== currentProvider) {
+      setProvider(item.provider as 'netshort' | 'reelshort')
+    }
+    navigate(`/film/${item.shortPlayId}`)
+  }
+
+  return (
+    <div
+      className="flex flex-col cursor-pointer"
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+    >
+      <FilmCard
+        shortPlayId={item.shortPlayId}
+        shortPlayName={item.shortPlayName}
+        shortPlayCover={item.shortPlayCover}
+      />
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        {relativeTime(item.lastWatchedAt)}
+      </p>
+      {item.provider !== currentProvider && (
+        <span className="text-[9px] text-muted-foreground/60 mt-0.5">
+          {item.provider === 'netshort' ? 'NetShort' : 'ReelShort'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function HistoryPage() {
   const history = usePersonalStore((s) => s.history)
 
@@ -23,12 +61,12 @@ export default function HistoryPage() {
       <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center gap-4">
         <History className="w-12 h-12 text-muted-foreground" strokeWidth={1} />
         <p className="text-muted-foreground text-sm">Chưa có lịch sử xem</p>
-        <Link
-          to="/"
+        <a
+          href="/"
           className="text-sm text-primary hover:underline"
         >
           Khám phá phim →
-        </Link>
+        </a>
       </div>
     )
   }
@@ -41,16 +79,7 @@ export default function HistoryPage() {
 
       <div className="grid grid-cols-2 gap-3">
         {history.map((item) => (
-          <div key={item.shortPlayId} className="flex flex-col">
-            <FilmCard
-              shortPlayId={item.shortPlayId}
-              shortPlayName={item.shortPlayName}
-              shortPlayCover={item.shortPlayCover}
-            />
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              {relativeTime(item.lastWatchedAt)}
-            </p>
-          </div>
+          <HistoryItem key={`${item.provider}:${item.shortPlayId}`} item={item} />
         ))}
       </div>
     </div>

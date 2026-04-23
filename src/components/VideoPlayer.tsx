@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Plyr from 'plyr';
 import 'plyr/dist/plyr.css';
+import Hls from 'hls.js';
 
 interface Subtitle {
   url: string;
@@ -128,7 +129,6 @@ function PlyrPlayer({
     if (!container) return;
 
     const video = document.createElement('video');
-    video.src = src;
     video.crossOrigin = 'anonymous';
     video.playsInline = true;
     video.autoplay = true;
@@ -158,6 +158,16 @@ function PlyrPlayer({
         plyrEl?.classList.add('is-portrait');
       }
     });
+
+    // Load source BEFORE Plyr init so Plyr sees media from the start
+    let hlsInstance: Hls | null = null;
+    if (src.includes('.m3u8') && Hls.isSupported()) {
+      hlsInstance = new Hls({ enableWorker: true });
+      hlsInstance.loadSource(src);
+      hlsInstance.attachMedia(video);
+    } else {
+      video.src = src;
+    }
 
     const player = new Plyr(video, {
       controls: [
@@ -212,6 +222,7 @@ function PlyrPlayer({
 
     return () => {
       if (onEnded) video.removeEventListener('ended', onEnded);
+      hlsInstance?.destroy();
       player.destroy();
       container.innerHTML = '';
     };

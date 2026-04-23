@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import Hls from 'hls.js'
 import type { EpisodeInfo, SubtitleItem } from '@/types/index'
 import { X, ChevronUp, ChevronDown, List } from 'lucide-react'
 import EpisodeGroupTabs from '@/components/EpisodeGroupTabs'
@@ -20,6 +21,8 @@ export interface TikTokOverlayProps {
   shortPlayId: string
   /** Called when overlay closes — pass final episode index so WatchPage can sync route */
   onClose: (finalIndex: number) => void
+  /** If provided, called to fetch playVoucher URLs for episodes that have none (e.g. ReelShort) */
+  getVideoUrl?: (episodeId: string) => Promise<string | null>
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -42,16 +45,27 @@ function formatTime(s: number) {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 }
 
-function loadEpisodeIntoVideo(video: HTMLVideoElement, ep: EpisodeInfo | null, autoplay: boolean) {
+function loadEpisodeIntoVideo(
+  video: HTMLVideoElement,
+  ep: EpisodeInfo | null,
+  autoplay: boolean,
+  resolvedUrl?: string,
+  hlsMap?: Map<HTMLVideoElement, Hls>,
+) {
   // Clear existing tracks
   Array.from(video.querySelectorAll('track')).forEach(t => t.remove())
 
-  if (!ep?.playVoucher) { video.src = ''; return }
+  // Destroy any existing HLS for this video slot
+  if (hlsMap) {
+    hlsMap.get(video)?.destroy()
+    hlsMap.delete(video)
+  }
 
-  // Subtitle tracks — do NOT set default=true; we render cues manually via a
-  // custom div so we control position/style. Keep mode='hidden' so activeCues
-  // is still populated (mode='disabled' would prevent cue loading entirely).
-  if (ep.subtitleList?.length) {
+  const url = resolvedUrl ?? ep?.playVoucher ?? null
+  if (!url) { video.src = ''; return }
+
+  // Subtitle tracks — mode='hidden' so cues are available but native rendering is off
+  if (ep?.subtitleList?.length) {
     ep.subtitleList.forEach((sub: SubtitleItem) => {
       const track = document.createElement('track')
       track.kind = 'subtitles'
@@ -60,7 +74,6 @@ function loadEpisodeIntoVideo(video: HTMLVideoElement, ep: EpisodeInfo | null, a
       track.label = LANG_LABELS[sub.subtitleLanguage] ?? sub.subtitleLanguage
       video.appendChild(track)
     })
-    // Force hidden so browser doesn't render native cues
     video.addEventListener('loadedmetadata', () => {
       for (let i = 0; i < video.textTracks.length; i++) {
         video.textTracks[i].mode = 'hidden'
@@ -68,14 +81,45 @@ function loadEpisodeIntoVideo(video: HTMLVideoElement, ep: EpisodeInfo | null, a
     }, { once: true })
   }
 
-  if (autoplay) {
-    const onCanPlay = () => video.play().catch(() => {})
-    video.addEventListener('canplay', onCanPlay, { once: true })
+  // HLS (.m3u8) or plain source
+  if (url.includes('.m3u8') && Hls.isSupported()) {
+    const hls = new Hls({ enableWorker: true })
+    if (hlsMap) hlsMap.set(video, hls)
+    hls.loadSource(url)
+    hls.attachMedia(video)
+    if (autoplay) {
+      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
+    }
   } else {
-    video.preload = 'auto'
+    if (autoplay) {
+      video.addEventListener('canplay', () => video.play().catch(() => {}), { once: true })
+    } else {
+      video.preload = 'auto'
+    }
+    video.src = url
+    video.load()
   }
-  video.src = ep.playVoucher
-  video.load()
+}
+
+/** Async loader: resolves URL from cache or via fetchUrl before loading into video */
+async function asyncLoadEpisode(
+  video: HTMLVideoElement,
+  ep: EpisodeInfo | null,
+  autoplay: boolean,
+  urlCache: Map<string, string>,
+  hlsMap: Map<HTMLVideoElement, Hls>,
+  fetchUrl?: ((id: string) => Promise<string | null>) | undefined,
+) {
+  if (!ep) { loadEpisodeIntoVideo(video, null, autoplay, undefined, hlsMap); return }
+
+  let url: string | null = ep.playVoucher ?? urlCache.get(ep.episodeId) ?? null
+  if (!url && fetchUrl) {
+    try {
+      url = await fetchUrl(ep.episodeId)
+      if (url) urlCache.set(ep.episodeId, url)
+    } catch { url = null }
+  }
+  loadEpisodeIntoVideo(video, ep, autoplay, url ?? undefined, hlsMap)
 }
 
 function setTranslateY(el: HTMLElement | null, vh: number, animated: boolean) {
@@ -113,7 +157,7 @@ function SeekFeedback({ side, visible }: { side: 'left' | 'right'; visible: bool
 
 // ─── Main overlay ─────────────────────────────────────────────────────────────
 
-export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onClose }: TikTokOverlayProps) {
+export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onClose, getVideoUrl }: TikTokOverlayProps) {
   // ── Slot refs (3 stable DOM nodes, never recreated) ───────────────────────
   const slotDivRefs = [
     useRef<HTMLDivElement>(null),
@@ -125,6 +169,13 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
     useRef<HTMLVideoElement>(null),
     useRef<HTMLVideoElement>(null),
   ]
+
+  // HLS instance map (one per video slot) and URL cache for on-demand fetching
+  const hlsMapRef = useRef<Map<HTMLVideoElement, Hls>>(new Map())
+  const urlCacheRef = useRef<Map<string, string>>(new Map())
+  // Keep getVideoUrl in a ref so effects can call it without stale closure
+  const getVideoUrlRef = useRef(getVideoUrl)
+  useEffect(() => { getVideoUrlRef.current = getVideoUrl }, [getVideoUrl])
 
   // Circular buffer state (mutable refs for use inside event handlers)
   const activeSlotRef = useRef(1)          // which slot (0,1,2) is visible
@@ -173,11 +224,11 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
     setTranslateY(slotDivRefs[1].current, 0, false)      // current (visible)
     setTranslateY(slotDivRefs[2].current, 100, false)    // next (below)
 
-    // Load initial episodes
+    // Load initial episodes (async to support on-demand URL fetching)
     const loadSlot = (slotId: number, epIdx: number, autoplay: boolean) => {
       const v = videoRefs[slotId].current
       const ep = episodes[epIdx] ?? null
-      if (v) loadEpisodeIntoVideo(v, ep, autoplay)
+      if (v) void asyncLoadEpisode(v, ep, autoplay, urlCacheRef.current, hlsMapRef.current, getVideoUrlRef.current)
     }
 
     loadSlot(0, initialIndex - 1, false)  // prev: preload
@@ -193,7 +244,12 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
 
     // Prevent body scroll while overlay is open
     document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
+    return () => {
+      document.body.style.overflow = ''
+      // Destroy all HLS instances when overlay unmounts
+      hlsMapRef.current.forEach(hls => hls.destroy())
+      hlsMapRef.current.clear()
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -230,11 +286,11 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
 
     // Load target into active slot
     const targetEp = episodes[epIdx]
-    loadEpisodeIntoVideo(videoRefs[curSlot].current!, targetEp, true)
+    void asyncLoadEpisode(videoRefs[curSlot].current!, targetEp, true, urlCacheRef.current, hlsMapRef.current, getVideoUrlRef.current)
 
     // Load adjacent into the other two slots
-    loadEpisodeIntoVideo(videoRefs[prevSlot].current!, episodes[epIdx - 1] ?? null, false)
-    loadEpisodeIntoVideo(videoRefs[nextSlot].current!, episodes[epIdx + 1] ?? null, false)
+    void asyncLoadEpisode(videoRefs[prevSlot].current!, episodes[epIdx - 1] ?? null, false, urlCacheRef.current, hlsMapRef.current, getVideoUrlRef.current)
+    void asyncLoadEpisode(videoRefs[nextSlot].current!, episodes[epIdx + 1] ?? null, false, urlCacheRef.current, hlsMapRef.current, getVideoUrlRef.current)
 
     // Reposition (active stays at 0, others reset to offscreen)
     setTranslateY(slotDivRefs[curSlot].current, 0, false)
@@ -299,7 +355,7 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
       const recycleEp = episodes[recycleEpIdx] ?? null
       setTranslateY(slotDivRefs[recycledSlot].current, direction === 1 ? 100 : -100, false)
       const recycledVideo = videoRefs[recycledSlot].current
-      if (recycledVideo) loadEpisodeIntoVideo(recycledVideo, recycleEp, false)
+      if (recycledVideo) void asyncLoadEpisode(recycledVideo, recycleEp, false, urlCacheRef.current, hlsMapRef.current, getVideoUrlRef.current)
 
       // Update refs
       activeSlotRef.current = targetSlot

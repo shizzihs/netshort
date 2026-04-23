@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ProviderContextProvider } from './contexts/ProviderContext'
 import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
 import SearchPage from './pages/SearchPage'
@@ -24,6 +25,7 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ProviderContextProvider>
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
@@ -44,6 +46,7 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </ProviderContextProvider>
     </QueryClientProvider>
   )
 }
