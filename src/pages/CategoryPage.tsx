@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import FilmGrid, { FilmGridSkeleton } from '@/components/FilmGrid'
 import Pagination from '@/components/Pagination'
 import { useCategories, useCategoryFilms, useReelShortCategories, useReelShortCategoryFilms } from '../hooks/useCategories'
+import { getCategoryFilms } from '../api/categories'
 import { useProvider } from '@/contexts/ProviderContext'
+import { getStoredProvider } from '@/contexts/ProviderContext'
 import type { Film } from '@/types'
 
 interface Tag {
@@ -22,8 +25,28 @@ function extractTags(data: unknown): Tag[] {
   return []
 }
 
+const SESSION_KEY = 'categoryPage:cursors'
+
+function loadCursorMap(): Record<string, number> {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveCursorMap(map: Record<string, number>) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(map))
+  } catch {
+    // sessionStorage unavailable (private browsing, quota exceeded)
+  }
+}
+
 export default function CategoryPage() {
   const { isReelShort } = useProvider()
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // All filter/pagination state lives in the URL — back/forward works for free
@@ -33,8 +56,14 @@ export default function CategoryPage() {
     ? searchParams.get('tags')!.split(',').filter(Boolean)
     : []
 
-  // Cursor scoped by compound key → naturally invalidates when provider/tab/tags change
-  const [cursorMap, setCursorMap] = useState<Record<string, number>>({})
+  // Cursor map persisted to sessionStorage so it survives navigation away and back.
+  // Keys are scoped by filter context to avoid cross-filter cursor reuse.
+  const [cursorMap, setCursorMap] = useState<Record<string, number>>(loadCursorMap)
+
+  useEffect(() => {
+    saveCursorMap(cursorMap)
+  }, [cursorMap])
+
   const filterKey = `${isReelShort}:${rsTab}:${selectedTagIds.join(',')}`
   const cursorOffset = page > 1 ? cursorMap[`${filterKey}:${page}`] : undefined
 
@@ -79,14 +108,45 @@ export default function CategoryPage() {
     setSearchParams({ tab: tabId, page: '1' }, { replace: false })
   }
 
-  const handlePageChange = (p: number) => {
-    if (p === page + 1 && maxOffset !== undefined) {
-      setCursorMap((prev) => ({ ...prev, [`${filterKey}:${p}`]: maxOffset }))
+  const handlePageChange = async (targetPage: number) => {
+    const workingMap = { ...cursorMap }
+
+    // Store current page's maxOffset as cursor for the next page
+    if (maxOffset !== undefined) {
+      workingMap[`${filterKey}:${page + 1}`] = maxOffset
     }
+
+    // When jumping forward by more than 1 page, pre-fetch each intermediate page
+    // sequentially to build up the cursor chain
+    if (!isReelShort && targetPage > page + 1) {
+      const provider = getStoredProvider()
+      for (let p = page + 1; p < targetPage; p++) {
+        const cursorForP = workingMap[`${filterKey}:${p}`]
+        if (cursorForP === undefined) break  // can't proceed without cursor
+
+        try {
+          const data = await queryClient.fetchQuery({
+            queryKey: ['category-films', provider, selectedTagIds, cursorForP, 20],
+            queryFn: () => getCategoryFilms(selectedTagIds, cursorForP, 20),
+            staleTime: 5 * 60 * 1000,
+          })
+          const nextCursor = (data as { maxOffset?: number })?.maxOffset
+          if (nextCursor !== undefined) {
+            workingMap[`${filterKey}:${p + 1}`] = nextCursor
+          } else {
+            break
+          }
+        } catch {
+          break
+        }
+      }
+    }
+
+    setCursorMap(workingMap)
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
-        next.set('page', String(p))
+        next.set('page', String(targetPage))
         return next
       },
       { replace: false },
