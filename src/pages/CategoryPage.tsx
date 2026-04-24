@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import FilmGrid, { FilmGridSkeleton } from '@/components/FilmGrid'
 import Pagination from '@/components/Pagination'
@@ -23,74 +24,73 @@ function extractTags(data: unknown): Tag[] {
 
 export default function CategoryPage() {
   const { isReelShort } = useProvider()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [page, setPage] = useState(1)
-  const [rsTab, setRsTab] = useState('44385')
-  const [nextCursor, setNextCursor] = useState<number | null>(null)
+  // All filter/pagination state lives in the URL — back/forward works for free
+  const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1)
+  const rsTab = searchParams.get('tab') ?? '44385'
+  const selectedTagIds = searchParams.get('tags')
+    ? searchParams.get('tags')!.split(',').filter(Boolean)
+    : []
 
-  useEffect(() => {
-    setPage(1)
-    setNextCursor(null)
-  }, [isReelShort])
+  // Cursor scoped by compound key → naturally invalidates when provider/tab/tags change
+  const [cursorMap, setCursorMap] = useState<Record<string, number>>({})
+  const filterKey = `${isReelShort}:${rsTab}:${selectedTagIds.join(',')}`
+  const cursorOffset = page > 1 ? cursorMap[`${filterKey}:${page}`] : undefined
 
   const { data: categoriesData, isLoading: categoriesLoading } = useCategories()
   const tags = extractTags(categoriesData)
-
-  // NetShort: page 1 uses plain offset; page 2+ uses maxOffset cursor
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
 
   const { data: categoryData, isLoading: filmsLoading } = useCategoryFilms(
     selectedTagIds,
     (page - 1) * 20,
     20,
-    page > 1 ? nextCursor ?? undefined : undefined,
+    cursorOffset,
     !isReelShort,
   )
 
-  // ReelShort state
   const { data: rsCategoriesData, isLoading: rsCategoriesLoading } = useReelShortCategories(isReelShort)
   const rsTabList: Array<{ tab_id: string; tab_name: string }> =
     (rsCategoriesData as { tab_list?: Array<{ tab_id: string; tab_name: string }> })?.tab_list ?? []
   const { data: rsFilmsData, isLoading: rsFilmsLoading } = useReelShortCategoryFilms(rsTab, (page - 1) * 20, 20, isReelShort)
 
-  // Derive display data from active provider
   const loading = isReelShort ? rsFilmsLoading : filmsLoading
   const categoryLoading = isReelShort ? rsCategoriesLoading : categoriesLoading
 
-  // NetShort
   const films: Film[] = Array.isArray(categoryData?.dataList) ? categoryData.dataList : []
   const hasMore = categoryData?.completed === false
   const maxOffset = (categoryData as { maxOffset?: number })?.maxOffset
 
-  // ReelShort
   const rsFilms: Film[] = Array.isArray((rsFilmsData as { contentInfos?: Film[] })?.contentInfos)
     ? (rsFilmsData as { contentInfos: Film[] }).contentInfos
     : []
-  const rsHasMore = false
 
   const displayFilms = isReelShort ? rsFilms : films
-  const displayHasMore = isReelShort ? rsHasMore : hasMore
+  const displayHasMore = isReelShort ? false : hasMore
 
   const handleTagSelect = (tagIds: string[]) => {
-    setSelectedTagIds(tagIds)
-    setPage(1)
-    setNextCursor(null)
+    setSearchParams(
+      tagIds.length ? { tags: tagIds.join(','), page: '1' } : { page: '1' },
+      { replace: false },
+    )
   }
 
   const handleRsTabSelect = (tabId: string) => {
-    setRsTab(tabId)
-    setPage(1)
+    setSearchParams({ tab: tabId, page: '1' }, { replace: false })
   }
 
   const handlePageChange = (p: number) => {
     if (p === page + 1 && maxOffset !== undefined) {
-      // Sequential forward: use maxOffset cursor
-      setNextCursor(maxOffset)
-    } else {
-      // Backward or jump: plain offset is reliable
-      setNextCursor(null)
+      setCursorMap((prev) => ({ ...prev, [`${filterKey}:${p}`]: maxOffset }))
     }
-    setPage(p)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('page', String(p))
+        return next
+      },
+      { replace: false },
+    )
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -98,7 +98,7 @@ export default function CategoryPage() {
     <div className="pb-4">
       <h1 className="sr-only">Thể loại phim</h1>
 
-      {/* Tag filter — ReelShort uses tab_list, NetShort uses /categories */}
+      {/* Tag filter */}
       <div className="sticky top-0 z-30 bg-background pt-3 pb-2 px-4">
         <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
           {categoryLoading ? (
