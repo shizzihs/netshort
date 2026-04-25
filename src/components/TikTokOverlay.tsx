@@ -372,6 +372,175 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
     }, ANIM_MS)
   }, [episodes, shortPlayId, slotDivRefs, videoRefs])
 
+  // ── Play / pause active video ─────────────────────────────────────────────
+  const togglePlayPause = useCallback(() => {
+    const v = videoRefs[activeSlotRef.current].current
+    if (!v) return
+    if (v.paused) v.play().catch(() => {}); else v.pause()
+    revealControls()
+  }, [videoRefs, revealControls])
+
+  // ── Seek preview helpers (shared by touch + mouse effects) ──────────────
+  const showSeekPreview = useCallback((delta: number, newTime: number) => {
+    const div = seekPreviewRef.current
+    if (!div) return
+    div.style.opacity = '1'
+    const sign = delta >= 0 ? '+' : '−'
+    const absDelta = Math.round(Math.abs(delta))
+    div.innerHTML = `<div style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border-radius:16px;padding:20px 32px;display:flex;flex-direction:column;align-items:center;color:white;"><div style="font-size:32px;font-weight:700;line-height:1">${sign}${absDelta}s</div><div style="font-size:13px;opacity:0.75;margin-top:4px">${formatTime(Math.max(0, newTime))}</div></div>`
+  }, [])
+
+  const hideSeekPreview = useCallback(() => {
+    const div = seekPreviewRef.current
+    if (div) div.style.opacity = '0'
+  }, [])
+
+  // ── Mouse & keyboard (PC) ────────────────────────────────────────────────
+  useEffect(() => {
+    const overlay = document.getElementById('tiktok-overlay-root')
+    if (!overlay) return
+
+    const SEEK_RATE = 0.25
+    const SEEK_MAX = 90
+
+    // Wheel → navigate episodes (cooldown prevents rapid scroll through multiple)
+    let wheelCooldown = false
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      if (wheelCooldown || animating.current || showEpListRef.current) return
+      wheelCooldown = true
+      setTimeout(() => { wheelCooldown = false }, ANIM_MS + 100)
+      if (e.deltaY > 0) navigate(1)
+      else if (e.deltaY < 0) navigate(-1)
+    }
+
+    // Keyboard → arrows for nav/seek, space for play/pause
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (showEpListRef.current) return
+      const v = videoRefs[activeSlotRef.current].current
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault()
+          navigate(-1)
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          navigate(1)
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          if (v) v.currentTime = Math.max(0, v.currentTime - 10)
+          setSeekFeedback({ side: 'left', key: Date.now() })
+          setTimeout(() => setSeekFeedback(null), 700)
+          revealControls()
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          if (v) v.currentTime = Math.min(v.duration || 0, v.currentTime + 10)
+          setSeekFeedback({ side: 'right', key: Date.now() })
+          setTimeout(() => setSeekFeedback(null), 700)
+          revealControls()
+          break
+        case ' ':
+          e.preventDefault()
+          togglePlayPause()
+          break
+      }
+    }
+
+    // Mouse drag → horizontal seek; click → toggle controls / double-click seek
+    let mouseStartX = 0
+    let mouseStartTime = 0
+    let mouseHDragging = false
+    let mouseDownOnContent = false
+    let mouseClickCount = 0
+    let mouseClickTimer: ReturnType<typeof setTimeout> | null = null
+
+    const onMouseDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('button,input,[role="button"]')) {
+        mouseDownOnContent = false
+        return
+      }
+      mouseDownOnContent = true
+      mouseStartX = e.clientX
+      mouseStartTime = Date.now()
+      mouseHDragging = false
+    }
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!mouseDownOnContent || e.buttons !== 1 || showEpListRef.current) return
+      const dx = e.clientX - mouseStartX
+      if (!mouseHDragging && Math.abs(dx) > 8) mouseHDragging = true
+      if (mouseHDragging) {
+        const v = videoRefs[activeSlotRef.current].current
+        if (!v || !v.duration) return
+        const rawDelta = dx * SEEK_RATE
+        const clampedDelta = Math.max(-SEEK_MAX, Math.min(SEEK_MAX, rawDelta))
+        const newTime = Math.max(0, Math.min(v.duration, v.currentTime + clampedDelta))
+        showSeekPreview(clampedDelta, newTime)
+      }
+    }
+
+    const onMouseUp = (e: MouseEvent) => {
+      if (!mouseDownOnContent) return
+      const dx = e.clientX - mouseStartX
+      const dt = Date.now() - mouseStartTime
+
+      if (mouseHDragging) {
+        mouseHDragging = false
+        hideSeekPreview()
+        const v = videoRefs[activeSlotRef.current].current
+        if (v && v.duration) {
+          const rawDelta = dx * SEEK_RATE
+          const clampedDelta = Math.max(-SEEK_MAX, Math.min(SEEK_MAX, rawDelta))
+          v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + clampedDelta))
+        }
+        revealControls()
+        return
+      }
+
+      // Click: single → toggle controls, double → seek ±10s
+      if (Math.abs(dx) < 8 && dt < 300 && !showEpListRef.current) {
+        mouseClickCount += 1
+        if (mouseClickCount === 1) {
+          mouseClickTimer = setTimeout(() => {
+            mouseClickCount = 0
+            setShowControls(s => {
+              if (!s) { scheduleHide(); return true }
+              if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+              return false
+            })
+          }, 250)
+        } else if (mouseClickCount >= 2) {
+          if (mouseClickTimer) clearTimeout(mouseClickTimer)
+          mouseClickCount = 0
+          const isRight = e.clientX > window.innerWidth / 2
+          const v = videoRefs[activeSlotRef.current].current
+          if (v && v.duration) {
+            v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + (isRight ? 10 : -10)))
+          }
+          setSeekFeedback({ side: isRight ? 'right' : 'left', key: Date.now() })
+          setTimeout(() => setSeekFeedback(null), 700)
+          revealControls()
+        }
+      }
+    }
+
+    overlay.addEventListener('wheel', onWheel, { passive: false })
+    document.addEventListener('keydown', onKeyDown)
+    overlay.addEventListener('mousedown', onMouseDown)
+    overlay.addEventListener('mousemove', onMouseMove)
+    overlay.addEventListener('mouseup', onMouseUp)
+    return () => {
+      overlay.removeEventListener('wheel', onWheel)
+      document.removeEventListener('keydown', onKeyDown)
+      overlay.removeEventListener('mousedown', onMouseDown)
+      overlay.removeEventListener('mousemove', onMouseMove)
+      overlay.removeEventListener('mouseup', onMouseUp)
+      if (mouseClickTimer) clearTimeout(mouseClickTimer)
+    }
+  }, [navigate, revealControls, scheduleHide, togglePlayPause, showSeekPreview, hideSeekPreview, videoRefs])
+
   // ── Touch gesture handling (attached natively for passive:false) ──────────
   useEffect(() => {
     const overlay = document.getElementById('tiktok-overlay-root')
@@ -380,20 +549,6 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
     // Seek rate: 0.25s per pixel, capped at 90s
     const SEEK_RATE = 0.25
     const SEEK_MAX = 90
-
-    const showSeekPreview = (delta: number, newTime: number) => {
-      const div = seekPreviewRef.current
-      if (!div) return
-      div.style.opacity = '1'
-      const sign = delta >= 0 ? '+' : '−'
-      const absDelta = Math.round(Math.abs(delta))
-      div.innerHTML = `<div style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border-radius:16px;padding:20px 32px;display:flex;flex-direction:column;align-items:center;color:white;"><div style="font-size:32px;font-weight:700;line-height:1">${sign}${absDelta}s</div><div style="font-size:13px;opacity:0.75;margin-top:4px">${formatTime(Math.max(0, newTime))}</div></div>`
-    }
-
-    const hideSeekPreview = () => {
-      const div = seekPreviewRef.current
-      if (div) div.style.opacity = '0'
-    }
 
     const onTouchStart = (e: TouchEvent) => {
       if (seekingBar.current || showEpListRef.current) return
@@ -535,7 +690,7 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
       overlay.removeEventListener('touchmove', onTouchMove)
       overlay.removeEventListener('touchend', onTouchEnd)
     }
-  }, [navigate, revealControls, scheduleHide, episodes.length, slotDivRefs, videoRefs])
+  }, [navigate, revealControls, scheduleHide, showSeekPreview, hideSeekPreview, episodes.length, slotDivRefs, videoRefs])
 
   // ── Active video time tracking ────────────────────────────────────────────
   useEffect(() => {
@@ -576,14 +731,6 @@ export default function TikTokOverlay({ episodes, initialIndex, shortPlayId, onC
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
     v.currentTime = ratio * v.duration
   }, [videoRefs])
-
-  // ── Play / pause active video ─────────────────────────────────────────────
-  const togglePlayPause = useCallback(() => {
-    const v = videoRefs[activeSlotRef.current].current
-    if (!v) return
-    if (v.paused) v.play().catch(() => {}); else v.pause()
-    revealControls()
-  }, [videoRefs, revealControls])
 
   // ── Mute ─────────────────────────────────────────────────────────────────
   const toggleMute = useCallback(() => {
